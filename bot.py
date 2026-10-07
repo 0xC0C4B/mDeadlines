@@ -36,11 +36,7 @@ def build_dashboard_keyboard(is_subscribed: bool = True) -> InlineKeyboardMarkup
     keyboard = [
         [
             InlineKeyboardButton("📋 All Deadlines", callback_data="view:all:0"),
-            InlineKeyboardButton("🚨 Urgent (<72h)", callback_data="view:urgent:0"),
-        ],
-        [
-            InlineKeyboardButton("📅 This Week", callback_data="view:week:0"),
-            InlineKeyboardButton("⚡ Due Today", callback_data="view:today:0"),
+            InlineKeyboardButton("⚡ Due Soon (< 7d)", callback_data="view:soon:0"),
         ],
         [
             InlineKeyboardButton("📚 Subjects / Ignored", callback_data="action:courses"),
@@ -90,6 +86,12 @@ def build_deadlines_pagination_keyboard(
     if nav_buttons:
         rows.append(nav_buttons)
 
+    # Filter toggle button
+    if filter_type == "all":
+        rows.append([InlineKeyboardButton("⚡ Filter: Due Soon (< 7d)", callback_data="view:soon:0")])
+    elif filter_type == "soon":
+        rows.append([InlineKeyboardButton("📋 Show All Deadlines", callback_data="view:all:0")])
+
     # Return to menu button
     rows.append([
         InlineKeyboardButton("🔄 Refresh", callback_data=f"view:{filter_type}:{offset}"),
@@ -108,6 +110,7 @@ def render_deadlines_view(
     total = len(deadlines)
     filter_titles = {
         "all": "All Upcoming Deadlines",
+        "soon": "Deadlines Due Soon (≤ 7 Days)",
         "urgent": "Urgent Deadlines (< 72h)",
         "week": "Deadlines Due This Week",
         "today": "Deadlines Due Within 24 Hours",
@@ -252,16 +255,19 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         sync_deadlines_for_user(chat_id)
         cached = database.get_cached_deadlines(chat_id=chat_id, include_ignored=False)
 
-    urgent_count = sum(1 for d in cached if d.hours_remaining <= 72)
+    soon_count = sum(1 for d in cached if 0 <= d.hours_remaining <= 168)
+    urgent_count = sum(1 for d in cached if 0 <= d.hours_remaining <= 72)
     user_name = html.escape(user.first_name or "Student")
     ignored_count = len(database.get_ignored_courses(chat_id))
+
+    soon_info = f"{soon_count} ({urgent_count} urgent)" if urgent_count > 0 else str(soon_count)
 
     welcome_text = (
         f"👋 <b>Welcome back, {user_name}!</b>\n\n"
         "🎓 <b>Moodle Deadlines & Reminders Bot</b>\n\n"
         f"📊 <b>Status Overview:</b>\n"
         f"• <b>Active Tasks:</b> <code>{len(cached)}</code>\n"
-        f"• <b>Urgent (&lt;72h):</b> <code>{urgent_count}</code>\n"
+        f"• <b>Due Soon (≤ 7d):</b> <code>{soon_info}</code>\n"
         f"• <b>Ignored Subjects:</b> <code>{ignored_count}</code>\n"
         f"• <b>Reminders:</b> {'🔔 Enabled' if is_sub else '🔕 Muted'}\n\n"
         "Choose an action below to manage your assignments:"
@@ -280,9 +286,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "📖 <b>Moodle Deadline Bot Guide & Commands</b>\n\n"
         "<b>Navigation & Queries:</b>\n"
         "• /deadlines or /list - View all upcoming deadlines\n"
-        "• /today - Deadlines due in the next 24 hours\n"
-        "• /week - Deadlines due in the next 7 days\n"
-        "• /urgent - Deadlines due within 72 hours\n"
+        "• /soon - Deadlines due in the next 7 days (including urgent & today)\n"
         "• /course &lt;name&gt; - Filter deadlines by course code/name\n\n"
         "<b>Subject & Course Management:</b>\n"
         "• /courses - Interactive menu of all courses with ignore toggles\n"
@@ -324,28 +328,27 @@ async def cmd_deadlines(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_html(text, reply_markup=markup, disable_web_page_preview=True)
 
 
+async def cmd_soon(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /soon - deadlines due in the next 7 days (covers today, 24h, 72h, this week)."""
+    chat_id = update.effective_chat.id
+    deadlines = database.get_cached_deadlines(chat_id=chat_id, filter_type="soon", include_ignored=False)
+    text, markup = render_deadlines_view(deadlines, filter_type="soon", offset=0)
+    await update.message.reply_html(text, reply_markup=markup, disable_web_page_preview=True)
+
+
 async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /today."""
-    chat_id = update.effective_chat.id
-    deadlines = database.get_cached_deadlines(chat_id=chat_id, filter_type="today", include_ignored=False)
-    text, markup = render_deadlines_view(deadlines, filter_type="today", offset=0)
-    await update.message.reply_html(text, reply_markup=markup, disable_web_page_preview=True)
+    await cmd_soon(update, context)
 
 
 async def cmd_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /week."""
-    chat_id = update.effective_chat.id
-    deadlines = database.get_cached_deadlines(chat_id=chat_id, filter_type="week", include_ignored=False)
-    text, markup = render_deadlines_view(deadlines, filter_type="week", offset=0)
-    await update.message.reply_html(text, reply_markup=markup, disable_web_page_preview=True)
+    await cmd_soon(update, context)
 
 
 async def cmd_urgent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /urgent."""
-    chat_id = update.effective_chat.id
-    deadlines = database.get_cached_deadlines(chat_id=chat_id, filter_type="urgent", include_ignored=False)
-    text, markup = render_deadlines_view(deadlines, filter_type="urgent", offset=0)
-    await update.message.reply_html(text, reply_markup=markup, disable_web_page_preview=True)
+    await cmd_soon(update, context)
 
 
 async def cmd_course(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -879,9 +882,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler(["deadlines", "list"], cmd_deadlines))
-    app.add_handler(CommandHandler("today", cmd_today))
-    app.add_handler(CommandHandler("week", cmd_week))
-    app.add_handler(CommandHandler("urgent", cmd_urgent))
+    app.add_handler(CommandHandler(["soon", "today", "week", "urgent"], cmd_soon))
     app.add_handler(CommandHandler("course", cmd_course))
     app.add_handler(CommandHandler("courses", cmd_courses))
     app.add_handler(CommandHandler("ignore", cmd_ignore))

@@ -72,10 +72,8 @@ Open Telegram, find your bot, and send `/start`.
 | Command | Description |
 |---|---|
 | `/start` | Open the interactive dashboard with status overview and quick buttons |
-| `/deadlines` or `/list` | List upcoming deadlines with pagination and action buttons |
-| `/today` | Show tasks due within the next 24 hours |
-| `/week` | Show tasks due within the next 7 days |
-| `/urgent` | Show tasks due within 72 hours |
+| `/deadlines` or `/list` | List all upcoming deadlines with pagination and action buttons |
+| `/soon` | Show deadlines due soon (within 7 days, including urgent & today) |
 | `/course <name>` | Filter deadlines by course name or code (e.g., `/course RA`) |
 | `/courses` | Interactive menu of all courses with one-click ignore toggles |
 | `/ignore <subject>` | Ignore a subject (e.g. `/ignore PROGRAMIRANJE I` or `/ignore RA`) |

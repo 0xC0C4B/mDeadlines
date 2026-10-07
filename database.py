@@ -449,7 +449,10 @@ def get_cached_deadlines(
         if course_filter and not matches_course_pattern(course_filter, item.course):
             continue
 
-        if filter_type == "today":
+        if filter_type in ("soon", "upcoming"):
+            if not (0 <= item.hours_remaining <= 168):
+                continue
+        elif filter_type == "today":
             if not (0 <= item.hours_remaining <= 24):
                 continue
         elif filter_type == "week":

@@ -133,10 +133,13 @@ class TestDatabaseAndCompletion(unittest.TestCase):
         cached = database.get_cached_deadlines(chat_id=111, filter_type="all")
         self.assertEqual(len(cached), 2)
 
-        # Filter today
+        # Filter today & soon
         today_items = database.get_cached_deadlines(chat_id=111, filter_type="today")
         self.assertEqual(len(today_items), 1)
         self.assertEqual(today_items[0].uid, "d1")
+
+        soon_items = database.get_cached_deadlines(chat_id=111, filter_type="soon")
+        self.assertEqual(len(soon_items), 2)
 
         # Mark done
         target_id = cached[0].id
