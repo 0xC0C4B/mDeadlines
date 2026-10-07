@@ -541,6 +541,7 @@ async def cmd_setmoodle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     url = context.args[0].strip()
     database.set_user_moodle_url(chat_id, url)
+    database.purge_demo_deadlines()
     loading = await update.message.reply_text("⏳ Verifying and syncing your Moodle feed...")
     result = sync_deadlines_for_user(chat_id)
     await loading.delete()
@@ -549,7 +550,7 @@ async def cmd_setmoodle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_html(
             f"✅ <b>Moodle Calendar Connected!</b>\n\n"
             f"Successfully synced <b>{result.items_count}</b> upcoming deadline(s).\n"
-            "Proactive reminders are enabled. Use /deadlines to view them.",
+            "All demo placeholders have been removed. Proactive reminders are enabled.",
             reply_markup=build_dashboard_keyboard(True)
         )
     else:
@@ -563,9 +564,31 @@ async def cmd_clearmoodle(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Handle /clearmoodle."""
     chat_id = update.effective_chat.id
     database.set_user_moodle_url(chat_id, None)
+    database.purge_demo_deadlines()
+    database.clear_all_deadlines()
+
+    if config.DEFAULT_MOODLE_ICAL_URL:
+        result = sync_deadlines_for_user(chat_id)
+        msg = (
+            f"🗑️ <b>Custom calendar feed removed.</b>\n\n"
+            f"Re-synced with system default calendar (<code>{result.items_count}</code> tasks).\n"
+            "All dummy demo assignments have been purged."
+        )
+    else:
+        msg = (
+            "🗑️ <b>Custom calendar feed removed.</b>\n\n"
+            "All custom and demo assignments have been completely cleared from storage.\n"
+            "Use <code>/setmoodle &lt;url&gt;</code> to link your Moodle calendar."
+        )
+    await update.message.reply_html(msg, reply_markup=build_dashboard_keyboard(True))
+
+
+async def cmd_cleardemo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /cleardemo."""
+    count = database.purge_demo_deadlines()
     await update.message.reply_html(
-        "🗑️ <b>Custom calendar feed removed.</b>\n"
-        "Your account has been reset to use the default or local calendar source."
+        f"🧹 <b>Demo assignments purged!</b>\n"
+        f"Removed <b>{count}</b> placeholder demo assignment(s) from your storage."
     )
 
 
@@ -893,6 +916,7 @@ def main() -> None:
     app.add_handler(CommandHandler("sync", cmd_sync))
     app.add_handler(CommandHandler("setmoodle", cmd_setmoodle))
     app.add_handler(CommandHandler("clearmoodle", cmd_clearmoodle))
+    app.add_handler(CommandHandler("cleardemo", cmd_cleardemo))
     app.add_handler(CommandHandler("subscribe", cmd_subscribe))
     app.add_handler(CommandHandler("unsubscribe", cmd_unsubscribe))
     app.add_handler(CommandHandler("thresholds", cmd_thresholds))

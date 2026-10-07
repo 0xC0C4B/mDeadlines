@@ -83,7 +83,8 @@ Open Telegram, find your bot, and send `/start`.
 | `/undone <id>` | Re-activate a completed task |
 | `/sync` | Force an immediate sync with Moodle |
 | `/setmoodle <url>` | Link your personal Moodle iCal URL |
-| `/clearmoodle` | Reset custom URL (reverts to system default) |
+| `/clearmoodle` | Reset custom URL & clear dummy tasks |
+| `/cleardemo` | Explicitly purge any demo/placeholder tasks from database |
 | `/subscribe` | Enable proactive deadline reminder notifications |
 | `/unsubscribe` | Mute reminder notifications |
 | `/thresholds <h1,h2...>` | Customize alert warning hours (e.g., `/thresholds 72,24,3,1`) |

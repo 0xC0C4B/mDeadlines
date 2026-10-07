@@ -111,6 +111,16 @@ def init_db() -> None:
                 UNIQUE(chat_id, deadline_uid, threshold_hours)
             )
         """)
+        # Safe migration if sent_alerts was created in older schema
+        cur = conn.execute("PRAGMA table_info(sent_alerts)")
+        cols = {row["name"] for row in cur.fetchall()}
+        if "deadline_id" in cols and "deadline_uid" not in cols:
+            conn.execute("ALTER TABLE sent_alerts RENAME COLUMN deadline_id TO deadline_uid")
+
+        # Auto-clean any legacy demo/dummy placeholder items
+        conn.execute("DELETE FROM deadlines WHERE uid LIKE 'demo-%'")
+        conn.execute("DELETE FROM sent_alerts WHERE deadline_uid LIKE 'demo-%'")
+        conn.execute("DELETE FROM user_completions WHERE deadline_uid LIKE 'demo-%'")
         conn.commit()
 
 
@@ -300,11 +310,42 @@ def get_all_courses(chat_id: Optional[int] = None) -> List[dict]:
 
 # ---------------- Deadlines Storage & Queries ---------------- #
 
-def save_or_update_deadlines(items: List[Deadline]) -> int:
-    """Insert or update parsed deadlines into local cache."""
+def purge_demo_deadlines() -> int:
+    """Purge all demo / dummy placeholder deadlines and related records."""
+    with get_connection() as conn:
+        cur = conn.execute("DELETE FROM deadlines WHERE uid LIKE 'demo-%'")
+        count = cur.rowcount
+        conn.execute("DELETE FROM sent_alerts WHERE deadline_uid LIKE 'demo-%'")
+        conn.execute("DELETE FROM user_completions WHERE deadline_uid LIKE 'demo-%'")
+        conn.commit()
+    return count
+
+
+def clear_all_deadlines() -> None:
+    """Clear all cached deadlines and alert states."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM deadlines")
+        conn.execute("DELETE FROM sent_alerts")
+        conn.execute("DELETE FROM user_completions")
+        conn.commit()
+
+
+def save_or_update_deadlines(items: List[Deadline], replace_all: bool = False) -> int:
+    """Insert or update parsed deadlines into local cache, always purging demo entries."""
     now_iso = datetime.now(timezone.utc).isoformat()
     count = 0
     with get_connection() as conn:
+        # Always purge any demo placeholder items
+        conn.execute("DELETE FROM deadlines WHERE uid LIKE 'demo-%'")
+        conn.execute("DELETE FROM sent_alerts WHERE deadline_uid LIKE 'demo-%'")
+        conn.execute("DELETE FROM user_completions WHERE deadline_uid LIKE 'demo-%'")
+
+        # If replace_all is requested, remove deadlines not present in the new sync
+        if replace_all and items:
+            active_uids = [item.uid for item in items]
+            placeholders = ",".join("?" for _ in active_uids)
+            conn.execute(f"DELETE FROM deadlines WHERE uid NOT IN ({placeholders})", active_uids)
+
         for item in items:
             due_iso = item.due_date.isoformat()
             conn.execute("""

@@ -195,6 +195,39 @@ class TestDatabaseAndCompletion(unittest.TestCase):
         self.assertTrue(database.has_alert_been_sent(chat_id, uid, 24))
         self.assertFalse(database.has_alert_been_sent(chat_id, uid, 3))
 
+    def test_purge_demo_deadlines(self):
+        now = datetime.now(timezone.utc)
+        demo_items = [
+            Deadline("demo-1", "Demo Assignment", "CS101", now + timedelta(days=1)),
+            Deadline("demo-2", "Demo Quiz", "CS101", now + timedelta(days=2)),
+        ]
+        # Insert demo items directly
+        with database.get_connection() as conn:
+            for d in demo_items:
+                conn.execute(
+                    "INSERT INTO deadlines (uid, title, course, due_date) VALUES (?, ?, ?, ?)",
+                    (d.uid, d.title, d.course, d.due_date.isoformat())
+                )
+            conn.commit()
+
+        cached_before = database.get_cached_deadlines()
+        self.assertEqual(len(cached_before), 2)
+
+        # Purge demo items
+        purged = database.purge_demo_deadlines()
+        self.assertEqual(purged, 2)
+        cached_after = database.get_cached_deadlines()
+        self.assertEqual(len(cached_after), 0)
+
+        # Test automatic purge when real items are saved with replace_all
+        real_items = [
+            Deadline("real-101", "Real Assignment", "MATH", now + timedelta(days=3))
+        ]
+        database.save_or_update_deadlines(real_items, replace_all=True)
+        cached_real = database.get_cached_deadlines()
+        self.assertEqual(len(cached_real), 1)
+        self.assertEqual(cached_real[0].uid, "real-101")
+
 
 if __name__ == "__main__":
     unittest.main()
