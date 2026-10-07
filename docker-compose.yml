@@ -1,0 +1,9 @@
+services:
+  bot:
+    build: .
+    container_name: moodle-telegram-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./bot_data.db:/app/bot_data.db

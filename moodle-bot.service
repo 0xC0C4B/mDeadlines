@@ -1,0 +1,15 @@
+[Unit]
+Description=Moodle Telegram Deadlines & Reminder Bot
+After=network.target
+
+[Service]
+Type=simple
+User=user
+WorkingDirectory=/home/user/VSC/telegram-bot
+ExecStart=/home/user/VSC/telegram-bot/.venv/bin/python /home/user/VSC/telegram-bot/bot.py
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/user/VSC/telegram-bot/.env
+
+[Install]
+WantedBy=multi-user.target
